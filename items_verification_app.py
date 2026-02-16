@@ -53,9 +53,10 @@ st.markdown("""
     
     .stRadio > div > label[data-checked="true"],
     .stRadio > div > label:has(input:checked) {
-        background: #2563eb !important;
+        background: #ffffff !important;
         border-color: #2563eb !important;
-        color: white !important;
+        color: #2563eb !important;
+        font-weight: 700 !important;
     }
     
     .stRadio {
