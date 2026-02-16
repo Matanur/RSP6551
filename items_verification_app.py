@@ -11,6 +11,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
 from datetime import datetime
+from io import BytesIO
 import json
 import gspread
 from google.oauth2.service_account import Credentials
@@ -722,6 +723,24 @@ def admin_summarize_table(df):
             )
             fig_team.update_layout(height=350, showlegend=False)
             st.plotly_chart(fig_team, use_container_width=True)
+    
+    # --- Export to Excel ---
+    st.markdown("---")
+    st.markdown("**ייצוא לאקסל**")
+    
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='נתונים', index=False)
+        summary_df.to_excel(writer, sheet_name='סיכום לפי פריט', index=False)
+        person_df.to_excel(writer, sheet_name='סיכום לפי משתמש', index=False)
+    
+    st.download_button(
+        label="הורד דוח אקסל",
+        data=output.getvalue(),
+        file_name=f"דוח_ציוד_{datetime.now().strftime('%d_%m_%Y')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
 
 
 def admin_summarize_changes(df):
@@ -1035,6 +1054,7 @@ def user_view(df):
         # Count items with status
         items_with_status = sum(1 for item in all_items if get_person_item_status(df, selected_name, item) is not None)
         st.markdown(f"**רשימת ציוד** ({items_with_status} פריטים רשומים)")
+        st.caption("שים לב: יש לי באוטו/בבית/בתיק השני/עליי שווה ערך לאין. רק ציוד שנמצא בתיק ווסט ומאוכסן ברספיה נחשב לציוד קיים")
         
         # Tracking variables
         item_statuses = {}
