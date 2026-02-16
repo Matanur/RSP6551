@@ -103,6 +103,7 @@ st.markdown("""
     .stMarkdown p {
         margin: 0 !important;
         padding: 0 !important;
+        text-align: right !important;
     }
     
     .stMarkdown {
@@ -186,6 +187,14 @@ st.markdown("""
     /* Caption styling */
     .stCaption, small {
         color: #666 !important;
+        text-align: right !important;
+        display: block !important;
+    }
+    
+    /* Selectbox label */
+    div[data-testid="stSelectbox"] label {
+        text-align: right !important;
+        display: block !important;
     }
     
     /* Text area */
