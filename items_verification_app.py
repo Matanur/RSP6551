@@ -7,6 +7,8 @@ Supports Google Sheets for cloud deployment
 
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 from pathlib import Path
 from datetime import datetime
 import gspread
@@ -220,6 +222,9 @@ DATA_FILE = Path(__file__).parent / "RSP6551.xlsx"
 # Item columns to track (excluding metadata columns)
 METADATA_COLS = ['תא אחסון', 'צוות', 'שם', 'Unnamed: 26', 'זיכוי']
 
+# Admin password
+ADMIN_PASSWORD = "1556"
+
 # Status options
 STATUS_OPTIONS = ["אין", "יש", "תרומה"]
 STATUS_MAP = {"אין": None, "יש": 1, "תרומה": "ת"}
@@ -380,6 +385,432 @@ def save_verification(df, name, item_statuses, notes=""):
     return DATA_FILE.name
 
 
+def load_backup_data():
+    """Load backup data from Google Sheets or local file"""
+    client = get_google_sheets_client()
+    if client:
+        try:
+            spreadsheet = client.open_by_key(SPREADSHEET_ID)
+            sheet_names = [ws.title for ws in spreadsheet.worksheets()]
+            if "גיבוי_מקורי" in sheet_names:
+                backup_ws = spreadsheet.worksheet("גיבוי_מקורי")
+                data = backup_ws.get_all_records()
+                return pd.DataFrame(data)
+        except Exception:
+            pass
+    
+    # Fallback to local backup
+    backup_file = DATA_FILE.parent / f"גיבוי_מקורי_{DATA_FILE.name}"
+    if backup_file.exists():
+        return pd.read_excel(backup_file)
+    return None
+
+
+def save_df_to_sheet(df):
+    """Save dataframe back to the main data source"""
+    if st.session_state.get('use_google_sheets') and st.session_state.get('gs_client'):
+        try:
+            client = st.session_state.gs_client
+            spreadsheet = client.open_by_key(SPREADSHEET_ID)
+            main_sheet = spreadsheet.sheet1
+            header = df.columns.tolist()
+            values = [header] + df.fillna("").values.tolist()
+            main_sheet.clear()
+            main_sheet.update('A1', values)
+            return True
+        except Exception as e:
+            st.error(f"שגיאה בשמירה: {e}")
+            return False
+    else:
+        try:
+            df.to_excel(DATA_FILE, index=False)
+            return True
+        except Exception as e:
+            st.error(f"שגיאה בשמירה: {e}")
+            return False
+
+
+def admin_manage_users(df):
+    """Admin tool: Add/Remove users"""
+    st.subheader("ניהול משתמשים")
+    
+    all_items = get_all_items(df)
+    
+    # --- Add user ---
+    st.markdown("**הוסף משתמש חדש**")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        new_name = st.text_input("שם:", key="admin_new_name")
+    with col2:
+        new_team = st.text_input("צוות:", key="admin_new_team")
+    with col3:
+        new_cell = st.text_input("תא אחסון:", key="admin_new_cell")
+    
+    if st.button("הוסף משתמש", key="admin_add_user"):
+        if not new_name:
+            st.error("יש להזין שם")
+        elif new_name in df['שם'].values:
+            st.error(f"\"{new_name}\" כבר קיים ברשימה")
+        else:
+            new_row = {col: "" for col in df.columns}
+            new_row['שם'] = new_name
+            new_row['צוות'] = new_team
+            new_row['תא אחסון'] = new_cell
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            if save_df_to_sheet(df):
+                st.success(f"המשתמש \"{new_name}\" נוסף בהצלחה")
+                st.rerun()
+    
+    st.markdown("---")
+    
+    # --- Remove user ---
+    st.markdown("**הסר משתמש**")
+    names = df['שם'].dropna().unique().tolist()
+    names.sort()
+    remove_name = st.selectbox("בחר משתמש להסרה:", options=[""] + names, key="admin_remove_name")
+    
+    if remove_name and st.button("הסר משתמש", key="admin_remove_user", type="primary"):
+        df = df[df['שם'] != remove_name].reset_index(drop=True)
+        if save_df_to_sheet(df):
+            st.success(f"המשתמש \"{remove_name}\" הוסר בהצלחה")
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # --- Edit user ---
+    st.markdown("**ערוך משתמש קיים**")
+    edit_name = st.selectbox("בחר משתמש לעריכה:", options=[""] + names, key="admin_edit_name")
+    if edit_name:
+        person_row = df[df['שם'] == edit_name]
+        if not person_row.empty:
+            row = person_row.iloc[0]
+            col1, col2 = st.columns(2)
+            with col1:
+                edit_team = st.text_input("צוות:", value=str(row.get('צוות', '')), key="admin_edit_team")
+            with col2:
+                edit_cell = st.text_input("תא אחסון:", value=str(row.get('תא אחסון', '')), key="admin_edit_cell")
+            
+            if st.button("שמור שינויים", key="admin_save_edit"):
+                idx = person_row.index[0]
+                df.at[idx, 'צוות'] = edit_team
+                df.at[idx, 'תא אחסון'] = edit_cell
+                if save_df_to_sheet(df):
+                    st.success(f"המשתמש \"{edit_name}\" עודכן בהצלחה")
+                    st.rerun()
+    
+    # --- Current users table ---
+    st.markdown("---")
+    st.markdown("**רשימת משתמשים נוכחית**")
+    users_df = df[['שם', 'צוות', 'תא אחסון']].copy()
+    users_df = users_df.dropna(subset=['שם'])
+    st.dataframe(users_df, use_container_width=True, hide_index=True)
+
+
+def admin_summarize_table(df):
+    """Admin tool: Summarize table with data and graphs"""
+    st.subheader("סיכום טבלה")
+    
+    all_items = get_all_items(df)
+    names = df['שם'].dropna().unique().tolist()
+    total_people = len(names)
+    
+    # --- Per-item summary ---
+    st.markdown("**סיכום לפי פריט**")
+    summary_rows = []
+    for item in all_items:
+        has_count = 0
+        donation_count = 0
+        missing_count = 0
+        for _, row in df.iterrows():
+            val = row.get(item)
+            if pd.isna(val) or val == '' or val == 0:
+                missing_count += 1
+            elif val == 1 or val == 1.0 or str(val) == '1':
+                has_count += 1
+            elif str(val) == 'ת':
+                donation_count += 1
+            else:
+                missing_count += 1
+        summary_rows.append({
+            'פריט': item,
+            'יש': has_count,
+            'תרומה': donation_count,
+            'אין': missing_count,
+            'סה"כ קיים': has_count + donation_count,
+            '% קיים': round((has_count + donation_count) / total_people * 100, 1) if total_people > 0 else 0
+        })
+    
+    summary_df = pd.DataFrame(summary_rows)
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    
+    # --- Bar chart: items coverage ---
+    st.markdown("**גרף כיסוי פריטים**")
+    fig_bar = px.bar(
+        summary_df,
+        x='פריט',
+        y=['יש', 'תרומה', 'אין'],
+        barmode='stack',
+        color_discrete_map={'יש': '#2563eb', 'תרומה': '#f59e0b', 'אין': '#ef4444'},
+        labels={'value': 'מספר אנשים', 'variable': 'סטטוס'},
+        title='כיסוי ציוד לפי פריט'
+    )
+    fig_bar.update_layout(
+        xaxis_tickangle=-45,
+        height=400,
+        font=dict(size=12),
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+    )
+    st.plotly_chart(fig_bar, use_container_width=True)
+    
+    # --- Per-person summary ---
+    st.markdown("**סיכום לפי משתמש**")
+    person_rows = []
+    for _, row in df.iterrows():
+        name = row.get('שם', '')
+        if pd.isna(name) or name == '':
+            continue
+        has_c = 0
+        don_c = 0
+        miss_c = 0
+        for item in all_items:
+            val = row.get(item)
+            if pd.isna(val) or val == '' or val == 0:
+                miss_c += 1
+            elif val == 1 or val == 1.0 or str(val) == '1':
+                has_c += 1
+            elif str(val) == 'ת':
+                don_c += 1
+            else:
+                miss_c += 1
+        person_rows.append({
+            'שם': name,
+            'צוות': row.get('צוות', ''),
+            'יש': has_c,
+            'תרומה': don_c,
+            'אין': miss_c,
+            'סה"כ קיים': has_c + don_c,
+            '% קיים': round((has_c + don_c) / len(all_items) * 100, 1) if len(all_items) > 0 else 0
+        })
+    
+    person_df = pd.DataFrame(person_rows)
+    st.dataframe(person_df, use_container_width=True, hide_index=True)
+    
+    # --- Pie chart: overall status ---
+    st.markdown("**התפלגות כללית**")
+    total_has = summary_df['יש'].sum()
+    total_donation = summary_df['תרומה'].sum()
+    total_missing = summary_df['אין'].sum()
+    
+    fig_pie = go.Figure(data=[go.Pie(
+        labels=['יש', 'תרומה', 'אין'],
+        values=[total_has, total_donation, total_missing],
+        marker_colors=['#2563eb', '#f59e0b', '#ef4444'],
+        hole=0.4
+    )])
+    fig_pie.update_layout(
+        title='התפלגות סטטוס כללית',
+        height=350,
+        font=dict(size=12)
+    )
+    st.plotly_chart(fig_pie, use_container_width=True)
+    
+    # --- Team summary ---
+    if 'צוות' in df.columns:
+        st.markdown("**סיכום לפי צוות**")
+        team_rows = []
+        for team in df['צוות'].dropna().unique():
+            if team == '':
+                continue
+            team_df_filtered = df[df['צוות'] == team]
+            team_has = 0
+            team_don = 0
+            team_miss = 0
+            for _, row in team_df_filtered.iterrows():
+                for item in all_items:
+                    val = row.get(item)
+                    if pd.isna(val) or val == '' or val == 0:
+                        team_miss += 1
+                    elif val == 1 or val == 1.0 or str(val) == '1':
+                        team_has += 1
+                    elif str(val) == 'ת':
+                        team_don += 1
+                    else:
+                        team_miss += 1
+            total_items_team = len(team_df_filtered) * len(all_items)
+            team_rows.append({
+                'צוות': team,
+                'אנשים': len(team_df_filtered),
+                'יש': team_has,
+                'תרומה': team_don,
+                'אין': team_miss,
+                '% קיים': round((team_has + team_don) / total_items_team * 100, 1) if total_items_team > 0 else 0
+            })
+        
+        if team_rows:
+            team_summary_df = pd.DataFrame(team_rows)
+            st.dataframe(team_summary_df, use_container_width=True, hide_index=True)
+            
+            fig_team = px.bar(
+                team_summary_df,
+                x='צוות',
+                y='% קיים',
+                color='צוות',
+                title='אחוז כיסוי ציוד לפי צוות',
+                labels={'% קיים': '% קיים'}
+            )
+            fig_team.update_layout(height=350, showlegend=False)
+            st.plotly_chart(fig_team, use_container_width=True)
+
+
+def admin_summarize_changes(df):
+    """Admin tool: Summarize changes from backup to current"""
+    st.subheader("סיכום שינויים מהגיבוי")
+    
+    backup_df = load_backup_data()
+    if backup_df is None:
+        st.warning("לא נמצא גיבוי להשוואה")
+        return
+    
+    all_items = get_all_items(df)
+    backup_items = get_all_items(backup_df)
+    common_items = [item for item in all_items if item in backup_items]
+    
+    # Find all changes
+    changes = []
+    
+    # Check existing users
+    current_names = set(df['שם'].dropna().unique())
+    backup_names = set(backup_df['שם'].dropna().unique())
+    
+    added_users = current_names - backup_names
+    removed_users = backup_names - current_names
+    common_users = current_names & backup_names
+    
+    # Show added/removed users
+    if added_users:
+        st.markdown(f"**משתמשים חדשים ({len(added_users)}):** {', '.join(added_users)}")
+    if removed_users:
+        st.markdown(f"**משתמשים שהוסרו ({len(removed_users)}):** {', '.join(removed_users)}")
+    
+    # Compare item-level changes for common users
+    for name in sorted(common_users):
+        backup_row = backup_df[backup_df['שם'] == name]
+        current_row = df[df['שם'] == name]
+        if backup_row.empty or current_row.empty:
+            continue
+        
+        for item in common_items:
+            old_val = backup_row.iloc[0].get(item)
+            new_val = current_row.iloc[0].get(item)
+            
+            # Normalize values
+            old_status = None
+            if not (pd.isna(old_val) or old_val == '' or old_val == 0):
+                if old_val == 1 or old_val == 1.0 or str(old_val) == '1':
+                    old_status = 1
+                elif str(old_val) == 'ת':
+                    old_status = "ת"
+            
+            new_status = None
+            if not (pd.isna(new_val) or new_val == '' or new_val == 0):
+                if new_val == 1 or new_val == 1.0 or str(new_val) == '1':
+                    new_status = 1
+                elif str(new_val) == 'ת':
+                    new_status = "ת"
+            
+            if old_status != new_status:
+                old_display = REVERSE_STATUS_MAP.get(old_status, "אין")
+                new_display = REVERSE_STATUS_MAP.get(new_status, "אין")
+                changes.append({
+                    'שם': name,
+                    'פריט': item,
+                    'מקור': old_display,
+                    'נוכחי': new_display
+                })
+    
+    if not changes and not added_users and not removed_users:
+        st.success("אין שינויים מהגיבוי")
+        return
+    
+    if changes:
+        st.markdown(f"**סה\"כ {len(changes)} שינויים בפריטים:**")
+        changes_df = pd.DataFrame(changes)
+        st.dataframe(changes_df, use_container_width=True, hide_index=True)
+        
+        # Summary chart of change types
+        gained = sum(1 for c in changes if c['מקור'] == 'אין' and c['נוכחי'] != 'אין')
+        lost = sum(1 for c in changes if c['מקור'] != 'אין' and c['נוכחי'] == 'אין')
+        changed_type = sum(1 for c in changes if c['מקור'] != 'אין' and c['נוכחי'] != 'אין')
+        
+        fig_changes = go.Figure(data=[go.Bar(
+            x=['פריטים שנוספו', 'פריטים שהוסרו', 'שינוי סוג'],
+            y=[gained, lost, changed_type],
+            marker_color=['#22c55e', '#ef4444', '#f59e0b']
+        )])
+        fig_changes.update_layout(
+            title='סיכום שינויים',
+            height=300,
+            yaxis_title='מספר שינויים',
+            font=dict(size=12)
+        )
+        st.plotly_chart(fig_changes, use_container_width=True)
+        
+        # Per-person change summary
+        st.markdown("**שינויים לפי משתמש**")
+        user_changes = {}
+        for c in changes:
+            name = c['שם']
+            if name not in user_changes:
+                user_changes[name] = {'שם': name, 'נוספו': 0, 'הוסרו': 0, 'שונו': 0}
+            if c['מקור'] == 'אין' and c['נוכחי'] != 'אין':
+                user_changes[name]['נוספו'] += 1
+            elif c['מקור'] != 'אין' and c['נוכחי'] == 'אין':
+                user_changes[name]['הוסרו'] += 1
+            else:
+                user_changes[name]['שונו'] += 1
+        
+        user_changes_df = pd.DataFrame(list(user_changes.values()))
+        st.dataframe(user_changes_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("אין שינויים בפריטים למשתמשים משותפים")
+
+
+def admin_panel(df):
+    """Admin panel with password protection"""
+    st.markdown("---")
+    
+    # Password gate
+    if not st.session_state.get('admin_authenticated', False):
+        with st.expander("כניסת מנהל"):
+            password = st.text_input("סיסמה:", type="password", key="admin_password")
+            if st.button("כניסה", key="admin_login"):
+                if password == ADMIN_PASSWORD:
+                    st.session_state.admin_authenticated = True
+                    st.rerun()
+                else:
+                    st.error("סיסמה שגויה")
+        return
+    
+    # Admin is authenticated
+    st.markdown("---")
+    st.markdown("**ניהול מערכת**")
+    
+    if st.button("התנתק מניהול", key="admin_logout"):
+        st.session_state.admin_authenticated = False
+        st.rerun()
+    
+    tab1, tab2, tab3 = st.tabs(["ניהול משתמשים", "סיכום טבלה", "סיכום שינויים"])
+    
+    with tab1:
+        admin_manage_users(df)
+    
+    with tab2:
+        admin_summarize_table(df)
+    
+    with tab3:
+        admin_summarize_changes(df)
+
+
 def main():
     st.title("אימות ציוד")
     
@@ -520,6 +951,9 @@ def main():
                 st.error("שגיאה בשמירת הקובץ")
     else:
         st.info("בחר את שמך מהרשימה")
+    
+    # Admin panel at the bottom
+    admin_panel(df)
 
 
 if __name__ == "__main__":
