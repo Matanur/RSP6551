@@ -49,28 +49,6 @@ st.markdown("""
         gap: 0.2rem !important;
     }
     
-    /* Item row styling */
-    .item-row {
-        display: flex;
-        align-items: center;
-        padding: 4px 8px;
-        border-bottom: 1px solid #eee;
-        background: #fafafa;
-        margin: 2px 0;
-        border-radius: 4px;
-    }
-    
-    .item-name {
-        flex: 1;
-        font-size: 14px;
-    }
-    
-    .item-original {
-        font-size: 11px;
-        color: #666;
-        margin-right: 8px;
-    }
-    
     /* Success/Error messages styling */
     .success-box {
         background-color: #d4edda;
@@ -113,21 +91,35 @@ st.markdown("""
         margin: 0.5rem 0 !important;
     }
 
-    /* Item row cards - alternating colors with clear separation */
-    .item-card-even {
-        background-color: #f0f4ff;
-        border: 1px solid #c5d3f0;
-        border-radius: 8px;
-        padding: 8px 12px;
-        margin: 4px 0;
+    /* Table-like alternating rows */
+    .row-gray {
+        background-color: #e9e9e9;
+        padding: 6px 10px;
+        border-bottom: 1px solid #ccc;
     }
     
-    .item-card-odd {
-        background-color: #fff8f0;
-        border: 1px solid #f0d9c5;
-        border-radius: 8px;
-        padding: 8px 12px;
-        margin: 4px 0;
+    .row-white {
+        background-color: #ffffff;
+        padding: 6px 10px;
+        border-bottom: 1px solid #ccc;
+    }
+    
+    /* Table header */
+    .table-header {
+        background-color: #4a6fa5;
+        color: white;
+        padding: 8px 10px;
+        font-weight: bold;
+        font-size: 14px;
+        border-radius: 6px 6px 0 0;
+    }
+    
+    /* Table wrapper */
+    .table-wrapper {
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        overflow: hidden;
+        margin: 8px 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -359,6 +351,10 @@ def main():
         donation_count = 0
         missing_required = []
         
+        # Table header
+        st.markdown('<div class="table-wrapper">', unsafe_allow_html=True)
+        st.markdown('<div class="table-header">פריט &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; סטטוס</div>', unsafe_allow_html=True)
+        
         for i, item in enumerate(all_items):
             original_status = get_person_item_status(df, selected_name, item)
             original_display = REVERSE_STATUS_MAP.get(original_status, "אין")
@@ -370,25 +366,26 @@ def main():
             else:
                 default_idx = STATUS_OPTIONS.index(st.session_state.get(key, original_display))
             
-            # Alternating card style
-            card_class = "item-card-even" if i % 2 == 0 else "item-card-odd"
+            # Alternating row color
+            row_class = "row-gray" if i % 2 == 0 else "row-white"
+            st.markdown(f'<div class="{row_class}">', unsafe_allow_html=True)
             
-            with st.container():
-                st.markdown(f'<div class="{card_class}">', unsafe_allow_html=True)
-                col1, col2 = st.columns([2, 3])
-                with col1:
-                    st.markdown(f"**{item}**")
-                
-                with col2:
-                    selected = st.radio(
-                        f"status_{item}",
-                        options=STATUS_OPTIONS,
-                        index=default_idx,
-                        key=key,
-                        horizontal=True,
-                        label_visibility="collapsed"
-                    )
-                st.markdown('</div>', unsafe_allow_html=True)
+            col1, col2 = st.columns([2, 3])
+            with col1:
+                st.markdown(f"**{item}**")
+            
+            with col2:
+                selected = st.radio(
+                    f"status_{item}",
+                    options=STATUS_OPTIONS,
+                    index=default_idx,
+                    key=key,
+                    horizontal=True,
+                    label_visibility="collapsed"
+                )
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
             
             # Track status
             item_statuses[item] = STATUS_MAP[selected]
