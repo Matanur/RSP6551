@@ -28,10 +28,10 @@ st.markdown("""
         direction: rtl;
     }
     
-    /* Dark modern theme overrides */
+    /* Light modern theme */
     .stApp {
-        background-color: #1a1a2e;
-        color: #e0e0e0;
+        background-color: #f5f7fa;
+        color: #2d3436;
     }
     
     /* Radio buttons - pill style */
@@ -45,16 +45,16 @@ st.markdown("""
         font-size: 13px !important;
         min-height: 0 !important;
         border-radius: 12px !important;
-        border: 1px solid #444 !important;
-        background: #16213e !important;
-        color: #e0e0e0 !important;
+        border: 1px solid #ccc !important;
+        background: #ffffff !important;
+        color: #333 !important;
         transition: all 0.2s !important;
     }
     
     .stRadio > div > label[data-checked="true"],
     .stRadio > div > label:has(input:checked) {
-        background: #0f3460 !important;
-        border-color: #e94560 !important;
+        background: #2563eb !important;
+        border-color: #2563eb !important;
         color: white !important;
     }
     
@@ -66,7 +66,7 @@ st.markdown("""
     .stRadio > label {
         font-size: 14px !important;
         font-weight: 600 !important;
-        color: #e0e0e0 !important;
+        color: #2d3436 !important;
         margin-bottom: 0 !important;
         padding-bottom: 0 !important;
     }
@@ -111,16 +111,16 @@ st.markdown("""
     
     /* Item row stripes */
     .item-row-even {
-        background: #16213e;
+        background: #ffffff;
         padding: 6px 10px;
-        border-bottom: 1px solid #2a2a4a;
+        border-bottom: 1px solid #e0e0e0;
         margin: 0;
     }
     
     .item-row-odd {
-        background: #1a1a2e;
+        background: #f0f2f5;
         padding: 6px 10px;
-        border-bottom: 1px solid #2a2a4a;
+        border-bottom: 1px solid #e0e0e0;
         margin: 0;
     }
 
@@ -131,23 +131,23 @@ st.markdown("""
     
     /* Success/Error boxes */
     .success-box {
-        background: linear-gradient(135deg, #1b4332, #2d6a4f);
+        background: linear-gradient(135deg, #d8f3dc, #b7e4c7);
         border: 2px solid #40916c;
         border-radius: 12px;
         padding: 15px;
         text-align: center;
         margin: 10px 0;
-        color: #d8f3dc;
+        color: #1b4332;
     }
     
     .error-box {
-        background: linear-gradient(135deg, #641220, #85182a);
+        background: linear-gradient(135deg, #ffd6d6, #ffb3b3);
         border: 2px solid #e5383b;
         border-radius: 12px;
         padding: 15px;
         text-align: center;
         margin: 10px 0;
-        color: #ffd6d6;
+        color: #641220;
     }
     
     /* Header */
@@ -155,7 +155,7 @@ st.markdown("""
         text-align: center;
         font-size: 1.5rem !important;
         margin-bottom: 0.3rem !important;
-        color: #e94560 !important;
+        color: #2563eb !important;
     }
     
     h3 {
@@ -172,25 +172,26 @@ st.markdown("""
     }
     
     .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #0f3460, #e94560) !important;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
         border: none !important;
+        color: white !important;
     }
 
     hr {
         margin: 0.4rem 0 !important;
-        border-color: #2a2a4a !important;
+        border-color: #ddd !important;
     }
     
     /* Caption styling */
     .stCaption, small {
-        color: #8888aa !important;
+        color: #666 !important;
     }
     
     /* Text area */
     textarea {
-        background: #16213e !important;
-        border: 1px solid #333 !important;
-        color: #e0e0e0 !important;
+        background: #ffffff !important;
+        border: 1px solid #ccc !important;
+        color: #333 !important;
     }
 </style>
 """, unsafe_allow_html=True)
