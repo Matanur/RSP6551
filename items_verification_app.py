@@ -23,21 +23,39 @@ st.set_page_config(
 # Custom CSS for compact mobile-friendly Hebrew RTL interface
 st.markdown("""
 <style>
-    /* RTL support for Hebrew */
+    /* RTL support */
     .stApp {
         direction: rtl;
     }
     
-    /* Compact radio buttons - minimal spacing */
+    /* Dark modern theme overrides */
+    .stApp {
+        background-color: #1a1a2e;
+        color: #e0e0e0;
+    }
+    
+    /* Radio buttons - pill style */
     .stRadio > div {
         flex-direction: row !important;
-        gap: 4px !important;
+        gap: 6px !important;
     }
     
     .stRadio > div > label {
-        padding: 1px 6px !important;
+        padding: 2px 10px !important;
         font-size: 13px !important;
         min-height: 0 !important;
+        border-radius: 12px !important;
+        border: 1px solid #444 !important;
+        background: #16213e !important;
+        color: #e0e0e0 !important;
+        transition: all 0.2s !important;
+    }
+    
+    .stRadio > div > label[data-checked="true"],
+    .stRadio > div > label:has(input:checked) {
+        background: #0f3460 !important;
+        border-color: #e94560 !important;
+        color: white !important;
     }
     
     .stRadio {
@@ -45,67 +63,134 @@ st.markdown("""
         padding: 0 !important;
     }
     
-    /* Minimal vertical spacing everywhere */
+    .stRadio > label {
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        color: #e0e0e0 !important;
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    /* Kill ALL vertical gaps */
     .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
     }
     
     div[data-testid="stVerticalBlock"] > div {
-        gap: 0rem !important;
+        gap: 0px !important;
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
     }
     
-    /* Remove extra padding from columns */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        padding: 0 !important;
+        gap: 0 !important;
+    }
+    
     div[data-testid="column"] > div {
         padding: 0 !important;
     }
     
-    /* Markdown text tight */
+    /* Radio group wrapper - kill spacing */
+    div[data-testid="stRadio"] {
+        margin-top: -4px !important;
+        margin-bottom: -4px !important;
+    }
+    
+    /* Tight text */
     .stMarkdown p {
         margin: 0 !important;
         padding: 0 !important;
     }
     
-    /* Success/Error messages styling */
+    .stMarkdown {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* Item row stripes */
+    .item-row-even {
+        background: #16213e;
+        padding: 6px 10px;
+        border-bottom: 1px solid #2a2a4a;
+        margin: 0;
+    }
+    
+    .item-row-odd {
+        background: #1a1a2e;
+        padding: 6px 10px;
+        border-bottom: 1px solid #2a2a4a;
+        margin: 0;
+    }
+
+    /* Selectbox */
+    div[data-testid="stSelectbox"] {
+        margin-bottom: 8px;
+    }
+    
+    /* Success/Error boxes */
     .success-box {
-        background-color: #d4edda;
-        border: 2px solid #28a745;
-        border-radius: 10px;
+        background: linear-gradient(135deg, #1b4332, #2d6a4f);
+        border: 2px solid #40916c;
+        border-radius: 12px;
         padding: 15px;
         text-align: center;
         margin: 10px 0;
+        color: #d8f3dc;
     }
     
     .error-box {
-        background-color: #f8d7da;
-        border: 2px solid #dc3545;
-        border-radius: 10px;
+        background: linear-gradient(135deg, #641220, #85182a);
+        border: 2px solid #e5383b;
+        border-radius: 12px;
         padding: 15px;
         text-align: center;
         margin: 10px 0;
+        color: #ffd6d6;
     }
     
-    /* Header styling */
+    /* Header */
     h1 {
         text-align: center;
         font-size: 1.5rem !important;
-        margin-bottom: 0.5rem !important;
+        margin-bottom: 0.3rem !important;
+        color: #e94560 !important;
     }
     
     h3 {
         font-size: 1rem !important;
-        margin: 0.5rem 0 !important;
+        margin: 0.3rem 0 !important;
     }
     
-    /* Compact buttons */
+    /* Buttons */
     .stButton > button {
         height: 45px;
         font-size: 16px !important;
         padding: 5px 10px !important;
+        border-radius: 10px !important;
+    }
+    
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #0f3460, #e94560) !important;
+        border: none !important;
     }
 
     hr {
-        margin: 0.5rem 0 !important;
+        margin: 0.4rem 0 !important;
+        border-color: #2a2a4a !important;
+    }
+    
+    /* Caption styling */
+    .stCaption, small {
+        color: #8888aa !important;
+    }
+    
+    /* Text area */
+    textarea {
+        background: #16213e !important;
+        border: 1px solid #333 !important;
+        color: #e0e0e0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -349,8 +434,8 @@ def main():
                 default_idx = STATUS_OPTIONS.index(st.session_state.get(key, original_display))
             
             # Alternating background
-            bg = "#f2f2f2" if i % 2 == 0 else "#ffffff"
-            st.markdown(f'<div style="background-color:{bg};padding:4px 8px;border-bottom:1px solid #ddd;">', unsafe_allow_html=True)
+            row_class = "item-row-even" if i % 2 == 0 else "item-row-odd"
+            st.markdown(f'<div class="{row_class}">', unsafe_allow_html=True)
             
             selected = st.radio(
                 f"{i+1}. {item}",
