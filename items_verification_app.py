@@ -11,6 +11,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
 from datetime import datetime
+import json
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -220,10 +221,13 @@ SCOPES = [
 DATA_FILE = Path(__file__).parent / "RSP6551.xlsx"
 
 # Item columns to track (excluding metadata columns)
-METADATA_COLS = ['תא אחסון', 'צוות', 'שם', 'Unnamed: 26', 'זיכוי']
+METADATA_COLS = ['תא אחסון', 'צוות', 'שם', 'Unnamed: 26', 'זיכוי', 'אומת_תאריך', 'הערות']
 
 # Admin password
 ADMIN_PASSWORD = "1556"
+
+# Lock settings file (local fallback)
+LOCK_FILE = Path(__file__).parent / "app_settings.json"
 
 # Status options
 STATUS_OPTIONS = ["אין", "יש", "תרומה"]
@@ -281,6 +285,55 @@ def load_data():
     except Exception as e:
         st.error(f"שגיאה בטעינת הקובץ: {e}")
         return None
+
+
+def get_lock_status():
+    """Check if the app is locked for regular users"""
+    # Try Google Sheets settings tab
+    client = get_google_sheets_client()
+    if client:
+        try:
+            spreadsheet = client.open_by_key(SPREADSHEET_ID)
+            sheet_names = [ws.title for ws in spreadsheet.worksheets()]
+            if "הגדרות" in sheet_names:
+                settings_ws = spreadsheet.worksheet("הגדרות")
+                val = settings_ws.acell('B1').value
+                return val == 'TRUE' or val == 'true' or val == '1'
+        except Exception:
+            pass
+    
+    # Fallback to local file
+    if LOCK_FILE.exists():
+        try:
+            data = json.loads(LOCK_FILE.read_text(encoding='utf-8'))
+            return data.get('locked', False)
+        except Exception:
+            pass
+    return False
+
+
+def set_lock_status(locked: bool):
+    """Set the app lock status"""
+    # Try Google Sheets settings tab
+    client = get_google_sheets_client()
+    if client:
+        try:
+            spreadsheet = client.open_by_key(SPREADSHEET_ID)
+            sheet_names = [ws.title for ws in spreadsheet.worksheets()]
+            if "הגדרות" not in sheet_names:
+                spreadsheet.add_worksheet(title="הגדרות", rows=10, cols=5)
+            settings_ws = spreadsheet.worksheet("הגדרות")
+            settings_ws.update('A1', [['locked', str(locked).upper()]])
+            return True
+        except Exception as e:
+            st.error(f"שגיאה בעדכון הגדרות: {e}")
+    
+    # Fallback to local file
+    try:
+        LOCK_FILE.write_text(json.dumps({'locked': locked}), encoding='utf-8')
+        return True
+    except Exception:
+        return False
 
 
 def get_all_items(df):
@@ -354,6 +407,11 @@ def save_verification(df, name, item_statuses, notes=""):
         if 'הערות' not in df.columns:
             df['הערות'] = ""
         df.at[idx, 'הערות'] = notes
+    
+    # Add verification timestamp
+    if 'אומת_תאריך' not in df.columns:
+        df['אומת_תאריך'] = ""
+    df.at[idx, 'אומת_תאריך'] = datetime.now().strftime('%d/%m/%Y %H:%M')
     
     # Try to save to Google Sheets
     if st.session_state.get('use_google_sheets') and st.session_state.get('gs_client'):
@@ -516,6 +574,7 @@ def admin_summarize_table(df):
     
     # --- Per-item summary ---
     st.markdown("**סיכום לפי פריט**")
+    st.caption(f"סה\"כ אנשים: {total_people}")
     summary_rows = []
     for item in all_items:
         has_count = 0
@@ -531,13 +590,14 @@ def admin_summarize_table(df):
                 donation_count += 1
             else:
                 missing_count += 1
+        pct = round((has_count + donation_count) / total_people * 100, 1) if total_people > 0 else 0
         summary_rows.append({
             'פריט': item,
             'יש': has_count,
             'תרומה': donation_count,
             'אין': missing_count,
-            'סה"כ קיים': has_count + donation_count,
-            '% קיים': round((has_count + donation_count) / total_people * 100, 1) if total_people > 0 else 0
+            'יש+תרומה': has_count + donation_count,
+            f'% (מתוך {total_people})': pct
         })
     
     summary_df = pd.DataFrame(summary_rows)
@@ -564,6 +624,7 @@ def admin_summarize_table(df):
     
     # --- Per-person summary ---
     st.markdown("**סיכום לפי משתמש**")
+    st.caption(f"סה\"כ פריטים: {len(all_items)}")
     person_rows = []
     for _, row in df.iterrows():
         name = row.get('שם', '')
@@ -582,14 +643,15 @@ def admin_summarize_table(df):
                 don_c += 1
             else:
                 miss_c += 1
+        pct = round((has_c + don_c) / len(all_items) * 100, 1) if len(all_items) > 0 else 0
         person_rows.append({
             'שם': name,
             'צוות': row.get('צוות', ''),
             'יש': has_c,
             'תרומה': don_c,
             'אין': miss_c,
-            'סה"כ קיים': has_c + don_c,
-            '% קיים': round((has_c + don_c) / len(all_items) * 100, 1) if len(all_items) > 0 else 0
+            'יש+תרומה': has_c + don_c,
+            f'% (מתוך {len(all_items)})': pct
         })
     
     person_df = pd.DataFrame(person_rows)
@@ -771,35 +833,150 @@ def admin_summarize_changes(df):
         
         user_changes_df = pd.DataFrame(list(user_changes.values()))
         st.dataframe(user_changes_df, use_container_width=True, hide_index=True)
+        
+        # Per-item change summary
+        st.markdown("**שינויים לפי פריט**")
+        item_changes = {}
+        for c in changes:
+            item = c['פריט']
+            if item not in item_changes:
+                item_changes[item] = {'פריט': item, 'נוספו': 0, 'הוסרו': 0, 'שונו': 0}
+            if c['מקור'] == 'אין' and c['נוכחי'] != 'אין':
+                item_changes[item]['נוספו'] += 1
+            elif c['מקור'] != 'אין' and c['נוכחי'] == 'אין':
+                item_changes[item]['הוסרו'] += 1
+            else:
+                item_changes[item]['שונו'] += 1
+        
+        item_changes_df = pd.DataFrame(list(item_changes.values()))
+        st.dataframe(item_changes_df, use_container_width=True, hide_index=True)
+        
+        # Per-item bar chart
+        fig_item_diff = px.bar(
+            item_changes_df,
+            x='פריט',
+            y=['נוספו', 'הוסרו', 'שונו'],
+            barmode='group',
+            color_discrete_map={'נוספו': '#22c55e', 'הוסרו': '#ef4444', 'שונו': '#f59e0b'},
+            title='שינויים לפי פריט',
+            labels={'value': 'מספר שינויים', 'variable': 'סוג שינוי'}
+        )
+        fig_item_diff.update_layout(
+            xaxis_tickangle=-45,
+            height=400,
+            font=dict(size=12),
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+        )
+        st.plotly_chart(fig_item_diff, use_container_width=True)
     else:
         st.info("אין שינויים בפריטים למשתמשים משותפים")
 
 
+def admin_verification_status(df):
+    """Admin tool: Show which users have verified and which haven't"""
+    st.subheader("סטטוס אימות")
+    
+    names = df['שם'].dropna().unique().tolist()
+    has_timestamp_col = 'אומת_תאריך' in df.columns
+    
+    verified = []
+    not_verified = []
+    
+    for name in sorted(names):
+        person_row = df[df['שם'] == name]
+        if person_row.empty:
+            continue
+        row = person_row.iloc[0]
+        team = row.get('צוות', '')
+        
+        if has_timestamp_col:
+            ts = row.get('אומת_תאריך', '')
+            if pd.notna(ts) and str(ts).strip() != '':
+                verified.append({'שם': name, 'צוות': team, 'תאריך אימות': str(ts)})
+            else:
+                not_verified.append({'שם': name, 'צוות': team})
+        else:
+            not_verified.append({'שם': name, 'צוות': team})
+    
+    total = len(verified) + len(not_verified)
+    
+    # Summary metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("סה\"כ אנשים", total)
+    with col2:
+        st.metric("אימתו", len(verified))
+    with col3:
+        st.metric("טרם אימתו", len(not_verified))
+    
+    # Progress bar
+    pct = len(verified) / total * 100 if total > 0 else 0
+    st.progress(len(verified) / total if total > 0 else 0, text=f"{pct:.0f}% אימתו")
+    
+    # Pie chart
+    fig = go.Figure(data=[go.Pie(
+        labels=['אימתו', 'טרם אימתו'],
+        values=[len(verified), len(not_verified)],
+        marker_colors=['#22c55e', '#ef4444'],
+        hole=0.4
+    )])
+    fig.update_layout(title='סטטוס אימות', height=300, font=dict(size=12))
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Tables
+    if verified:
+        st.markdown(f"**אימתו ({len(verified)}):**")
+        st.dataframe(pd.DataFrame(verified), use_container_width=True, hide_index=True)
+    
+    if not_verified:
+        st.markdown(f"**טרם אימתו ({len(not_verified)}):**")
+        st.dataframe(pd.DataFrame(not_verified), use_container_width=True, hide_index=True)
+
+
 def admin_panel(df):
     """Admin panel with password protection"""
-    st.markdown("---")
     
     # Password gate
     if not st.session_state.get('admin_authenticated', False):
-        with st.expander("כניסת מנהל"):
-            password = st.text_input("סיסמה:", type="password", key="admin_password")
-            if st.button("כניסה", key="admin_login"):
-                if password == ADMIN_PASSWORD:
-                    st.session_state.admin_authenticated = True
-                    st.rerun()
-                else:
-                    st.error("סיסמה שגויה")
+        st.markdown("---")
+        password = st.text_input("סיסמת מנהל:", type="password", key="admin_password")
+        if st.button("כניסה", key="admin_login"):
+            if password == ADMIN_PASSWORD:
+                st.session_state.admin_authenticated = True
+                st.rerun()
+            else:
+                st.error("סיסמה שגויה")
         return
     
     # Admin is authenticated
+    col_title, col_logout = st.columns([3, 1])
+    with col_title:
+        st.markdown("**ניהול מערכת**")
+    with col_logout:
+        if st.button("התנתק", key="admin_logout"):
+            st.session_state.admin_authenticated = False
+            st.rerun()
+    
+    # Lock/Unlock toggle
+    is_locked = get_lock_status()
+    lock_label = "האתר נעול למשתמשים" if is_locked else "האתר פתוח למשתמשים"
+    st.markdown(f"**מצב נוכחי:** {lock_label}")
+    
+    col_lock, col_unlock = st.columns(2)
+    with col_lock:
+        if st.button("נעל אתר", key="admin_lock", disabled=is_locked, use_container_width=True):
+            if set_lock_status(True):
+                st.success("האתר ננעל")
+                st.rerun()
+    with col_unlock:
+        if st.button("פתח אתר", key="admin_unlock", disabled=not is_locked, use_container_width=True):
+            if set_lock_status(False):
+                st.success("האתר נפתח")
+                st.rerun()
+    
     st.markdown("---")
-    st.markdown("**ניהול מערכת**")
     
-    if st.button("התנתק מניהול", key="admin_logout"):
-        st.session_state.admin_authenticated = False
-        st.rerun()
-    
-    tab1, tab2, tab3 = st.tabs(["ניהול משתמשים", "סיכום טבלה", "סיכום שינויים"])
+    tab1, tab2, tab3, tab4 = st.tabs(["ניהול משתמשים", "סיכום טבלה", "סיכום שינויים", "סטטוס אימות"])
     
     with tab1:
         admin_manage_users(df)
@@ -809,15 +986,16 @@ def admin_panel(df):
     
     with tab3:
         admin_summarize_changes(df)
-
-
-def main():
-    st.title("אימות ציוד")
     
-    # Load data
-    df = load_data()
-    if df is None:
-        st.error("לא ניתן לטעון את קובץ הנתונים")
+    with tab4:
+        admin_verification_status(df)
+
+
+def user_view(df):
+    """Regular user equipment verification view"""
+    # Check lock status
+    if get_lock_status():
+        st.warning("האתר סגור כרגע לאימות. נסה שוב מאוחר יותר.")
         return
     
     # Show data source indicator
@@ -951,9 +1129,31 @@ def main():
                 st.error("שגיאה בשמירת הקובץ")
     else:
         st.info("בחר את שמך מהרשימה")
+
+
+def main():
+    st.title("אימות ציוד")
     
-    # Admin panel at the bottom
-    admin_panel(df)
+    # Load data
+    df = load_data()
+    if df is None:
+        st.error("לא ניתן לטעון את קובץ הנתונים")
+        return
+    
+    # Top-level navigation
+    if st.session_state.get('admin_authenticated', False):
+        page_options = ["אימות ציוד", "ניהול מערכת"]
+    else:
+        page_options = ["אימות ציוד", "ניהול מערכת"]
+    
+    page = st.radio("", page_options, horizontal=True, key="nav_page", label_visibility="collapsed")
+    
+    st.markdown("---")
+    
+    if page == "אימות ציוד":
+        user_view(df)
+    elif page == "ניהול מערכת":
+        admin_panel(df)
 
 
 if __name__ == "__main__":
