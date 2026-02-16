@@ -384,8 +384,6 @@ def main():
                     label_visibility="collapsed"
                 )
             st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
             
             # Track status
             item_statuses[item] = STATUS_MAP[selected]
@@ -398,6 +396,8 @@ def main():
             # Check if originally had item but now missing
             if original_status is not None and selected == "אין":
                 missing_required.append(item)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
         
         st.session_state.initialized = True
         
