@@ -28,25 +28,74 @@ st.markdown("""
         direction: rtl;
     }
     
-    /* Compact radio buttons */
+    /* Compact radio buttons - minimal spacing */
     .stRadio > div {
         flex-direction: row !important;
-        gap: 5px !important;
+        gap: 4px !important;
     }
     
-    .stRadio label {
-        padding: 2px 8px !important;
-        font-size: 12px !important;
+    .stRadio > div > label {
+        padding: 1px 6px !important;
+        font-size: 13px !important;
+        min-height: 0 !important;
     }
     
-    /* Reduce spacing between elements */
+    .stRadio {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* Minimal vertical spacing everywhere */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
     }
     
     div[data-testid="stVerticalBlock"] > div {
-        gap: 0.2rem !important;
+        gap: 0rem !important;
+    }
+    
+    /* Remove extra padding from columns */
+    div[data-testid="column"] > div {
+        padding: 0 !important;
+    }
+    
+    /* Markdown text tight */
+    .stMarkdown p {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* The items table */
+    .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        margin: 8px 0;
+    }
+    
+    .items-table th {
+        background-color: #4a6fa5;
+        color: white;
+        padding: 8px 12px;
+        text-align: right;
+        font-weight: bold;
+        border: 1px solid #3a5a8a;
+    }
+    
+    .items-table td {
+        padding: 6px 12px;
+        text-align: right;
+        border: 1px solid #ddd;
+        font-weight: bold;
+    }
+    
+    .items-table tr:nth-child(even) {
+        background-color: #f2f2f2;
+    }
+    
+    .items-table tr:nth-child(odd) {
+        background-color: #ffffff;
     }
     
     /* Success/Error messages styling */
@@ -89,37 +138,6 @@ st.markdown("""
 
     hr {
         margin: 0.5rem 0 !important;
-    }
-
-    /* Table-like alternating rows */
-    .row-gray {
-        background-color: #e9e9e9;
-        padding: 6px 10px;
-        border-bottom: 1px solid #ccc;
-    }
-    
-    .row-white {
-        background-color: #ffffff;
-        padding: 6px 10px;
-        border-bottom: 1px solid #ccc;
-    }
-    
-    /* Table header */
-    .table-header {
-        background-color: #4a6fa5;
-        color: white;
-        padding: 8px 10px;
-        font-weight: bold;
-        font-size: 14px;
-        border-radius: 6px 6px 0 0;
-    }
-    
-    /* Table wrapper */
-    .table-wrapper {
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        overflow: hidden;
-        margin: 8px 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -345,15 +363,23 @@ def main():
         items_with_status = sum(1 for item in all_items if get_person_item_status(df, selected_name, item) is not None)
         st.markdown(f"**רשימת ציוד** ({items_with_status} פריטים רשומים)")
         
-        # Display items
+        # Tracking variables
         item_statuses = {}
         has_count = 0
         donation_count = 0
         missing_required = []
         
-        # Table header
-        st.markdown('<div class="table-wrapper">', unsafe_allow_html=True)
-        st.markdown('<div class="table-header">פריט &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; סטטוס</div>', unsafe_allow_html=True)
+        # Build HTML table showing items and their original status
+        table_html = '<table class="items-table"><tr><th>#</th><th>פריט</th><th>סטטוס מקורי</th></tr>'
+        for i, item in enumerate(all_items):
+            original_status = get_person_item_status(df, selected_name, item)
+            original_display = REVERSE_STATUS_MAP.get(original_status, "אין")
+            table_html += f'<tr><td>{i+1}</td><td>{item}</td><td>{original_display}</td></tr>'
+        table_html += '</table>'
+        st.markdown(table_html, unsafe_allow_html=True)
+        
+        # Radio buttons for each item - compact
+        st.markdown("**עדכן סטטוס:**")
         
         for i, item in enumerate(all_items):
             original_status = get_person_item_status(df, selected_name, item)
@@ -366,24 +392,13 @@ def main():
             else:
                 default_idx = STATUS_OPTIONS.index(st.session_state.get(key, original_display))
             
-            # Alternating row color
-            row_class = "row-gray" if i % 2 == 0 else "row-white"
-            st.markdown(f'<div class="{row_class}">', unsafe_allow_html=True)
-            
-            col1, col2 = st.columns([2, 3])
-            with col1:
-                st.markdown(f"**{item}**")
-            
-            with col2:
-                selected = st.radio(
-                    f"status_{item}",
-                    options=STATUS_OPTIONS,
-                    index=default_idx,
-                    key=key,
-                    horizontal=True,
-                    label_visibility="collapsed"
-                )
-            st.markdown('</div>', unsafe_allow_html=True)
+            selected = st.radio(
+                f"{i+1}. {item}",
+                options=STATUS_OPTIONS,
+                index=default_idx,
+                key=key,
+                horizontal=True,
+            )
             
             # Track status
             item_statuses[item] = STATUS_MAP[selected]
@@ -396,8 +411,6 @@ def main():
             # Check if originally had item but now missing
             if original_status is not None and selected == "אין":
                 missing_required.append(item)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
         
         st.session_state.initialized = True
         
