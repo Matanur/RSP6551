@@ -123,7 +123,7 @@ SCOPES = [
 ]
 
 # Fallback local file path
-DATA_FILE = Path(__file__).parent / "זיכויים קו צפון.xlsx"
+DATA_FILE = Path(__file__).parent / "RSP6551.xlsx"
 
 # Item columns to track (excluding metadata columns)
 METADATA_COLS = ['תא אחסון', 'צוות', 'שם', 'Unnamed: 26', 'זיכוי']
@@ -263,7 +263,7 @@ def save_verification(df, name, item_statuses, notes=""):
     
     # Fallback to local Excel
     date_str = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_file = DATA_FILE.parent / f"זיכויים_אימות_{date_str}.xlsx"
+    output_file = DATA_FILE.parent / f"RSP6551_{date_str}.xlsx"
     df.to_excel(output_file, index=False)
     return output_file.name
 
@@ -413,3 +413,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
