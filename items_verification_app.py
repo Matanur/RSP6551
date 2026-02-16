@@ -116,6 +116,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Google Sheets configuration
+# Use the native Google Sheets URL format (create a new Google Sheet, don't upload Excel)
 SPREADSHEET_ID = "1XRIXqax3atq5_ZrgoHZ0ZHkyZVp7VfPHOP9P9at7XMc"
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -238,6 +239,7 @@ def ensure_backup_exists(client, spreadsheet):
     except Exception as e:
         st.warning(f"לא ניתן ליצור גיבוי: {e}")
 
+
 def save_verification(df, name, item_statuses, notes=""):
     """Save verification - update main sheet directly, backup created once"""
     # Find person's row index
@@ -261,28 +263,30 @@ def save_verification(df, name, item_statuses, notes=""):
     if st.session_state.get('use_google_sheets') and st.session_state.get('gs_client'):
         try:
             client = st.session_state.gs_client
-            # Create a new sheet with timestamp
-            date_str = datetime.now().strftime('%Y%m%d_%H%M%S')
             spreadsheet = client.open_by_key(SPREADSHEET_ID)
             
-            # Update the main sheet or create verification log
-            new_sheet_name = f"אימות_{date_str}"
-            new_worksheet = spreadsheet.add_worksheet(title=new_sheet_name, rows=len(df)+1, cols=len(df.columns))
+            # Create backup of original data (only first time)
+            ensure_backup_exists(client, spreadsheet)
             
-            # Convert df to list of lists
+            # Update the main sheet directly
+            main_sheet = spreadsheet.sheet1
             header = df.columns.tolist()
             values = [header] + df.fillna("").values.tolist()
-            new_worksheet.update('A1', values)
+            main_sheet.clear()
+            main_sheet.update('A1', values)
             
-            return new_sheet_name
+            return "הגיליון הראשי"
         except Exception as e:
             st.warning(f"שגיאה בשמירה ל-Google Sheets: {e}")
     
-    # Fallback to local Excel
-    date_str = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_file = DATA_FILE.parent / f"RSP6551_{date_str}.xlsx"
-    df.to_excel(output_file, index=False)
-    return output_file.name
+    # Fallback to local Excel - update in place with one-time backup
+    backup_file = DATA_FILE.parent / f"גיבוי_מקורי_{DATA_FILE.name}"
+    if not backup_file.exists():
+        import shutil
+        shutil.copy(DATA_FILE, backup_file)
+    
+    df.to_excel(DATA_FILE, index=False)
+    return DATA_FILE.name
 
 
 def main():
@@ -430,6 +434,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
