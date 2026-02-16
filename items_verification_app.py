@@ -66,38 +66,6 @@ st.markdown("""
         padding: 0 !important;
     }
     
-    /* The items table */
-    .items-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 14px;
-        margin: 8px 0;
-    }
-    
-    .items-table th {
-        background-color: #4a6fa5;
-        color: white;
-        padding: 8px 12px;
-        text-align: right;
-        font-weight: bold;
-        border: 1px solid #3a5a8a;
-    }
-    
-    .items-table td {
-        padding: 6px 12px;
-        text-align: right;
-        border: 1px solid #ddd;
-        font-weight: bold;
-    }
-    
-    .items-table tr:nth-child(even) {
-        background-color: #f2f2f2;
-    }
-    
-    .items-table tr:nth-child(odd) {
-        background-color: #ffffff;
-    }
-    
     /* Success/Error messages styling */
     .success-box {
         background-color: #d4edda;
@@ -369,18 +337,6 @@ def main():
         donation_count = 0
         missing_required = []
         
-        # Build HTML table showing items and their original status
-        table_html = '<table class="items-table"><tr><th>#</th><th>פריט</th><th>סטטוס מקורי</th></tr>'
-        for i, item in enumerate(all_items):
-            original_status = get_person_item_status(df, selected_name, item)
-            original_display = REVERSE_STATUS_MAP.get(original_status, "אין")
-            table_html += f'<tr><td>{i+1}</td><td>{item}</td><td>{original_display}</td></tr>'
-        table_html += '</table>'
-        st.markdown(table_html, unsafe_allow_html=True)
-        
-        # Radio buttons for each item - compact
-        st.markdown("**עדכן סטטוס:**")
-        
         for i, item in enumerate(all_items):
             original_status = get_person_item_status(df, selected_name, item)
             original_display = REVERSE_STATUS_MAP.get(original_status, "אין")
@@ -392,6 +348,10 @@ def main():
             else:
                 default_idx = STATUS_OPTIONS.index(st.session_state.get(key, original_display))
             
+            # Alternating background
+            bg = "#f2f2f2" if i % 2 == 0 else "#ffffff"
+            st.markdown(f'<div style="background-color:{bg};padding:4px 8px;border-bottom:1px solid #ddd;">', unsafe_allow_html=True)
+            
             selected = st.radio(
                 f"{i+1}. {item}",
                 options=STATUS_OPTIONS,
@@ -399,6 +359,8 @@ def main():
                 key=key,
                 horizontal=True,
             )
+            
+            st.markdown('</div>', unsafe_allow_html=True)
             
             # Track status
             item_statuses[item] = STATUS_MAP[selected]
