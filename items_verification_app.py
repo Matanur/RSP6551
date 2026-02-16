@@ -221,8 +221,25 @@ def get_person_info(df, name):
     }
 
 
+def ensure_backup_exists(client, spreadsheet):
+    """Create a backup sheet if it doesn't exist (one-time only)"""
+    try:
+        sheet_names = [ws.title for ws in spreadsheet.worksheets()]
+        if "גיבוי_מקורי" not in sheet_names:
+            original_sheet = spreadsheet.sheet1
+            backup_sheet = spreadsheet.add_worksheet(
+                title="גיבוי_מקורי",
+                rows=original_sheet.row_count,
+                cols=original_sheet.col_count
+            )
+            all_data = original_sheet.get_all_values()
+            if all_data:
+                backup_sheet.update('A1', all_data)
+    except Exception as e:
+        st.warning(f"לא ניתן ליצור גיבוי: {e}")
+
 def save_verification(df, name, item_statuses, notes=""):
-    """Save verification to Google Sheets or local Excel file"""
+    """Save verification - update main sheet directly, backup created once"""
     # Find person's row index
     person_idx = df[df['שם'] == name].index
     if len(person_idx) == 0:
@@ -413,5 +430,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
