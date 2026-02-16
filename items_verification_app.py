@@ -112,6 +112,23 @@ st.markdown("""
     hr {
         margin: 0.5rem 0 !important;
     }
+
+    /* Item row cards - alternating colors with clear separation */
+    .item-card-even {
+        background-color: #f0f4ff;
+        border: 1px solid #c5d3f0;
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin: 4px 0;
+    }
+    
+    .item-card-odd {
+        background-color: #fff8f0;
+        border: 1px solid #f0d9c5;
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin: 4px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -342,7 +359,7 @@ def main():
         donation_count = 0
         missing_required = []
         
-        for item in all_items:
+        for i, item in enumerate(all_items):
             original_status = get_person_item_status(df, selected_name, item)
             original_display = REVERSE_STATUS_MAP.get(original_status, "אין")
             
@@ -353,20 +370,25 @@ def main():
             else:
                 default_idx = STATUS_OPTIONS.index(st.session_state.get(key, original_display))
             
-            # Show item with radio buttons
-            col1, col2 = st.columns([2, 3])
-            with col1:
-                st.markdown(f"**{item}**")
+            # Alternating card style
+            card_class = "item-card-even" if i % 2 == 0 else "item-card-odd"
             
-            with col2:
-                selected = st.radio(
-                    f"status_{item}",
-                    options=STATUS_OPTIONS,
-                    index=default_idx,
-                    key=key,
-                    horizontal=True,
-                    label_visibility="collapsed"
-                )
+            with st.container():
+                st.markdown(f'<div class="{card_class}">', unsafe_allow_html=True)
+                col1, col2 = st.columns([2, 3])
+                with col1:
+                    st.markdown(f"**{item}**")
+                
+                with col2:
+                    selected = st.radio(
+                        f"status_{item}",
+                        options=STATUS_OPTIONS,
+                        index=default_idx,
+                        key=key,
+                        horizontal=True,
+                        label_visibility="collapsed"
+                    )
+                st.markdown('</div>', unsafe_allow_html=True)
             
             # Track status
             item_statuses[item] = STATUS_MAP[selected]
