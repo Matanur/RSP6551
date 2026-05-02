@@ -1051,11 +1051,6 @@ def user_view(df):
         if st.session_state.selected_name != selected_name:
             st.session_state.selected_name = selected_name
             st.session_state.initialized = False
-            # Clear all item states
-            for item in all_items:
-                if f"item_{item}" in st.session_state:
-                    del st.session_state[f"item_{item}"]
-            st.rerun()
         
         # Show person info
         person_info = get_person_info(df, selected_name)
@@ -1079,8 +1074,8 @@ def user_view(df):
             original_status = get_person_item_status(df, selected_name, item)
             original_display = REVERSE_STATUS_MAP.get(original_status, "✗ אין")
             
-            # Set default value on first load
-            key = f"item_{item}"
+            # Key includes person name so switching persons creates fresh widgets
+            key = f"item_{selected_name}_{item}"
             if not st.session_state.initialized:
                 default_idx = STATUS_OPTIONS.index(original_display)
             else:
