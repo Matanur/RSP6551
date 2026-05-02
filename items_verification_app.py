@@ -45,14 +45,25 @@ st.markdown("""
     }
     
     .stRadio > div > label {
-        padding: 2px 10px !important;
-        font-size: 13px !important;
-        min-height: 0 !important;
-        border-radius: 12px !important;
-        border: 1px solid #ccc !important;
+        padding: 4px 14px !important;
+        font-size: 14px !important;
+        min-height: 28px !important;
+        min-width: 48px !important;
+        border-radius: 14px !important;
+        border: 1.5px solid #bbb !important;
         background: #ffffff !important;
         color: #333 !important;
         transition: all 0.2s !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        white-space: nowrap !important;
+    }
+    
+    .stRadio > div > label span {
+        font-size: 14px !important;
+        visibility: visible !important;
+        display: inline !important;
     }
     
     .stRadio > div > label[data-checked="true"],
@@ -1055,6 +1066,7 @@ def user_view(df):
         items_with_status = sum(1 for item in all_items if get_person_item_status(df, selected_name, item) is not None)
         st.markdown(f"**רשימת ציוד** ({items_with_status} פריטים רשומים)")
         st.caption("שים לב: יש לי באוטו/בבית/בתיק השני/עליי שווה ערך לאין. רק ציוד שנמצא בתיק ווסט ומאוכסן ברספיה נחשב לציוד קיים")
+        st.markdown('<div style="background:#e8f0fe;border-radius:8px;padding:6px 12px;margin:6px 0;text-align:center;font-size:13px;color:#1a56db;"><b>אין</b> = לא קיים &nbsp;|&nbsp; <b>יש</b> = קיים &nbsp;|&nbsp; <b>תרומה</b> = ציוד תרומה</div>', unsafe_allow_html=True)
         
         # Tracking variables
         item_statuses = {}
@@ -1110,16 +1122,9 @@ def user_view(df):
         # Notes field
         notes = st.text_area("הערות (אופציונלי):", height=80, placeholder="הוסף הערות כאן...")
         
-        # Buttons
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("אפס", use_container_width=True):
-                st.session_state.initialized = False
-                st.session_state.selected_name = None
-                st.rerun()
-        
-        with col2:
-            verify_clicked = st.button("אמת ושמור", use_container_width=True, type="primary")
+        # Save button - prominent and full width
+        st.markdown('<div style="background:#fff3cd;border:2px solid #ffc107;border-radius:10px;padding:8px;text-align:center;margin:10px 0;font-weight:bold;color:#856404;">⬇️ סיימת? לחץ כאן לשמירה ⬇️</div>', unsafe_allow_html=True)
+        verify_clicked = st.button("✅ אמת ושמור", use_container_width=True, type="primary")
         
         # Verification result
         if verify_clicked:
