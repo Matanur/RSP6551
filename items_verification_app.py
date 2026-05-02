@@ -242,9 +242,9 @@ ADMIN_PASSWORD = "1556"
 LOCK_FILE = Path(__file__).parent / "app_settings.json"
 
 # Status options
-STATUS_OPTIONS = ["אין", "יש", "תרומה"]
-STATUS_MAP = {"אין": None, "יש": 1, "תרומה": "ת"}
-REVERSE_STATUS_MAP = {None: "אין", 1: "יש", 1.0: "יש", "1": "יש", "ת": "תרומה"}
+STATUS_OPTIONS = ["✗ אין", "✓ יש", "🎁 תרומה"]
+STATUS_MAP = {"✗ אין": None, "✓ יש": 1, "🎁 תרומה": "ת"}
+REVERSE_STATUS_MAP = {None: "✗ אין", 1: "✓ יש", 1.0: "✓ יש", "1": "✓ יש", "ת": "🎁 תרומה"}
 
 
 def get_google_sheets_client():
@@ -811,8 +811,8 @@ def admin_summarize_changes(df):
                     new_status = "ת"
             
             if old_status != new_status:
-                old_display = REVERSE_STATUS_MAP.get(old_status, "אין")
-                new_display = REVERSE_STATUS_MAP.get(new_status, "אין")
+                old_display = REVERSE_STATUS_MAP.get(old_status, "✗ אין")
+                new_display = REVERSE_STATUS_MAP.get(new_status, "✗ אין")
                 changes.append({
                     'שם': name,
                     'פריט': item,
@@ -830,9 +830,9 @@ def admin_summarize_changes(df):
         st.dataframe(changes_df, use_container_width=True, hide_index=True)
         
         # Summary chart of change types
-        gained = sum(1 for c in changes if c['מקור'] == 'אין' and c['נוכחי'] != 'אין')
-        lost = sum(1 for c in changes if c['מקור'] != 'אין' and c['נוכחי'] == 'אין')
-        changed_type = sum(1 for c in changes if c['מקור'] != 'אין' and c['נוכחי'] != 'אין')
+        gained = sum(1 for c in changes if c['מקור'] == '✗ אין' and c['נוכחי'] != '✗ אין')
+        lost = sum(1 for c in changes if c['מקור'] != '✗ אין' and c['נוכחי'] == '✗ אין')
+        changed_type = sum(1 for c in changes if c['מקור'] != '✗ אין' and c['נוכחי'] != '✗ אין')
         
         fig_changes = go.Figure(data=[go.Bar(
             x=['פריטים שנוספו', 'פריטים שהוסרו', 'שינוי סוג'],
@@ -854,9 +854,9 @@ def admin_summarize_changes(df):
             name = c['שם']
             if name not in user_changes:
                 user_changes[name] = {'שם': name, 'נוספו': 0, 'הוסרו': 0, 'שונו': 0}
-            if c['מקור'] == 'אין' and c['נוכחי'] != 'אין':
+            if c['מקור'] == '✗ אין' and c['נוכחי'] != '✗ אין':
                 user_changes[name]['נוספו'] += 1
-            elif c['מקור'] != 'אין' and c['נוכחי'] == 'אין':
+            elif c['מקור'] != '✗ אין' and c['נוכחי'] == '✗ אין':
                 user_changes[name]['הוסרו'] += 1
             else:
                 user_changes[name]['שונו'] += 1
@@ -871,9 +871,9 @@ def admin_summarize_changes(df):
             item = c['פריט']
             if item not in item_changes:
                 item_changes[item] = {'פריט': item, 'נוספו': 0, 'הוסרו': 0, 'שונו': 0}
-            if c['מקור'] == 'אין' and c['נוכחי'] != 'אין':
+            if c['מקור'] == '✗ אין' and c['נוכחי'] != '✗ אין':
                 item_changes[item]['נוספו'] += 1
-            elif c['מקור'] != 'אין' and c['נוכחי'] == 'אין':
+            elif c['מקור'] != '✗ אין' and c['נוכחי'] == '✗ אין':
                 item_changes[item]['הוסרו'] += 1
             else:
                 item_changes[item]['שונו'] += 1
@@ -1066,7 +1066,7 @@ def user_view(df):
         items_with_status = sum(1 for item in all_items if get_person_item_status(df, selected_name, item) is not None)
         st.markdown(f"**רשימת ציוד** ({items_with_status} פריטים רשומים)")
         st.caption("שים לב: יש לי באוטו/בבית/בתיק השני/עליי שווה ערך לאין. רק ציוד שנמצא בתיק ווסט ומאוכסן ברספיה נחשב לציוד קיים")
-        st.markdown('<div style="background:#e8f0fe;border-radius:8px;padding:6px 12px;margin:6px 0;text-align:center;font-size:13px;color:#1a56db;"><b>אין</b> = לא קיים &nbsp;|&nbsp; <b>יש</b> = קיים &nbsp;|&nbsp; <b>תרומה</b> = ציוד תרומה</div>', unsafe_allow_html=True)
+        st.markdown('<div style="background:#e8f0fe;border-radius:8px;padding:6px 12px;margin:6px 0;text-align:center;font-size:13px;color:#1a56db;"><b>✗ אין</b> = לא קיים &nbsp;|&nbsp; <b>✓ יש</b> = קיים &nbsp;|&nbsp; <b>🎁 תרומה</b> = ציוד תרומה</div>', unsafe_allow_html=True)
         
         # Tracking variables
         item_statuses = {}
@@ -1076,7 +1076,7 @@ def user_view(df):
         
         for i, item in enumerate(all_items):
             original_status = get_person_item_status(df, selected_name, item)
-            original_display = REVERSE_STATUS_MAP.get(original_status, "אין")
+            original_display = REVERSE_STATUS_MAP.get(original_status, "✗ אין")
             
             # Set default value on first load
             key = f"item_{item}"
@@ -1102,13 +1102,13 @@ def user_view(df):
             # Track status
             item_statuses[item] = STATUS_MAP[selected]
             
-            if selected == "יש":
+            if selected == "✓ יש":
                 has_count += 1
-            elif selected == "תרומה":
+            elif selected == "🎁 תרומה":
                 donation_count += 1
             
             # Check if originally had item but now missing
-            if original_status is not None and selected == "אין":
+            if original_status is not None and selected == "✗ אין":
                 missing_required.append(item)
         
         st.session_state.initialized = True
