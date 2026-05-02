@@ -1055,6 +1055,7 @@ def user_view(df):
             for item in all_items:
                 if f"item_{item}" in st.session_state:
                     del st.session_state[f"item_{item}"]
+            st.rerun()
         
         # Show person info
         person_info = get_person_info(df, selected_name)
