@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from io import BytesIO
 import json
+import time
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -247,8 +248,9 @@ STATUS_MAP = {"✗ אין": None, "✓ יש": 1, "🎁 תרומה": "ת"}
 REVERSE_STATUS_MAP = {None: "✗ אין", 1: "✓ יש", 1.0: "✓ יש", "1": "✓ יש", "ת": "🎁 תרומה"}
 
 
+@st.cache_resource
 def get_google_sheets_client():
-    """Get authenticated Google Sheets client"""
+    """Get authenticated Google Sheets client (cached as resource)"""
     try:
         # Try to get credentials from Streamlit secrets (for cloud deployment)
         if hasattr(st, 'secrets') and 'gcp_service_account' in st.secrets:
@@ -269,25 +271,48 @@ def get_google_sheets_client():
         
         return None
     except Exception as e:
-        st.warning(f"Google Sheets לא זמין: {e}")
         return None
+
+
+@st.cache_resource
+def _get_spreadsheet():
+    """Get and cache the spreadsheet object"""
+    client = get_google_sheets_client()
+    if client:
+        try:
+            return client.open_by_key(SPREADSHEET_ID)
+        except Exception:
+            return None
+    return None
+
+
+def _invalidate_data_cache():
+    """Clear data caches after writes"""
+    _fetch_sheet_data.clear()
+    _fetch_lock_status.clear()
+
+
+@st.cache_data(ttl=120)
+def _fetch_sheet_data():
+    """Fetch sheet data with caching (TTL 120s to avoid quota issues)"""
+    spreadsheet = _get_spreadsheet()
+    if spreadsheet:
+        try:
+            worksheet = spreadsheet.sheet1
+            data = worksheet.get_all_records()
+            return pd.DataFrame(data), True
+        except Exception as e:
+            st.warning(f"שגיאה בטעינה מ-Google Sheets: {e}")
+    return None, False
 
 
 def load_data():
     """Load data from Google Sheets or local Excel file"""
-    # Try Google Sheets first
-    client = get_google_sheets_client()
-    if client:
-        try:
-            spreadsheet = client.open_by_key(SPREADSHEET_ID)
-            worksheet = spreadsheet.sheet1
-            data = worksheet.get_all_records()
-            df = pd.DataFrame(data)
-            st.session_state.use_google_sheets = True
-            st.session_state.gs_client = client
-            return df
-        except Exception as e:
-            st.warning(f"שגיאה בטעינה מ-Google Sheets: {e}")
+    df, from_sheets = _fetch_sheet_data()
+    if df is not None:
+        st.session_state.use_google_sheets = True
+        st.session_state.gs_client = get_google_sheets_client()
+        return df
     
     # Fallback to local Excel
     try:
@@ -299,13 +324,12 @@ def load_data():
         return None
 
 
-def get_lock_status():
-    """Check if the app is locked for regular users"""
-    # Try Google Sheets settings tab
-    client = get_google_sheets_client()
-    if client:
+@st.cache_data(ttl=120)
+def _fetch_lock_status():
+    """Fetch lock status with caching (TTL 120s)"""
+    spreadsheet = _get_spreadsheet()
+    if spreadsheet:
         try:
-            spreadsheet = client.open_by_key(SPREADSHEET_ID)
             sheet_names = [ws.title for ws in spreadsheet.worksheets()]
             if "הגדרות" in sheet_names:
                 settings_ws = spreadsheet.worksheet("הגדרות")
@@ -313,6 +337,14 @@ def get_lock_status():
                 return val == 'TRUE' or val == 'true' or val == '1'
         except Exception:
             pass
+    return None
+
+
+def get_lock_status():
+    """Check if the app is locked for regular users"""
+    result = _fetch_lock_status()
+    if result is not None:
+        return result
     
     # Fallback to local file
     if LOCK_FILE.exists():
@@ -326,16 +358,15 @@ def get_lock_status():
 
 def set_lock_status(locked: bool):
     """Set the app lock status"""
-    # Try Google Sheets settings tab
-    client = get_google_sheets_client()
-    if client:
+    spreadsheet = _get_spreadsheet()
+    if spreadsheet:
         try:
-            spreadsheet = client.open_by_key(SPREADSHEET_ID)
             sheet_names = [ws.title for ws in spreadsheet.worksheets()]
             if "הגדרות" not in sheet_names:
                 spreadsheet.add_worksheet(title="הגדרות", rows=10, cols=5)
             settings_ws = spreadsheet.worksheet("הגדרות")
             settings_ws.update('A1', [['locked', str(locked).upper()]])
+            _invalidate_data_cache()
             return True
         except Exception as e:
             st.error(f"שגיאה בעדכון הגדרות: {e}")
@@ -426,13 +457,12 @@ def save_verification(df, name, item_statuses, notes=""):
     df.at[idx, 'אומת_תאריך'] = datetime.now().strftime('%d/%m/%Y %H:%M')
     
     # Try to save to Google Sheets
-    if st.session_state.get('use_google_sheets') and st.session_state.get('gs_client'):
+    if st.session_state.get('use_google_sheets'):
         try:
-            client = st.session_state.gs_client
-            spreadsheet = client.open_by_key(SPREADSHEET_ID)
+            spreadsheet = _get_spreadsheet()
             
             # Create backup of original data (only first time)
-            ensure_backup_exists(client, spreadsheet)
+            ensure_backup_exists(get_google_sheets_client(), spreadsheet)
             
             # Update the main sheet directly
             main_sheet = spreadsheet.sheet1
@@ -441,6 +471,7 @@ def save_verification(df, name, item_statuses, notes=""):
             main_sheet.clear()
             main_sheet.update('A1', values)
             
+            _invalidate_data_cache()
             return "הגיליון הראשי"
         except Exception as e:
             st.warning(f"שגיאה בשמירה ל-Google Sheets: {e}")
@@ -457,10 +488,9 @@ def save_verification(df, name, item_statuses, notes=""):
 
 def load_backup_data():
     """Load backup data from Google Sheets or local file"""
-    client = get_google_sheets_client()
-    if client:
+    spreadsheet = _get_spreadsheet()
+    if spreadsheet:
         try:
-            spreadsheet = client.open_by_key(SPREADSHEET_ID)
             sheet_names = [ws.title for ws in spreadsheet.worksheets()]
             if "גיבוי_מקורי" in sheet_names:
                 backup_ws = spreadsheet.worksheet("גיבוי_מקורי")
@@ -478,15 +508,15 @@ def load_backup_data():
 
 def save_df_to_sheet(df):
     """Save dataframe back to the main data source"""
-    if st.session_state.get('use_google_sheets') and st.session_state.get('gs_client'):
+    if st.session_state.get('use_google_sheets'):
         try:
-            client = st.session_state.gs_client
-            spreadsheet = client.open_by_key(SPREADSHEET_ID)
+            spreadsheet = _get_spreadsheet()
             main_sheet = spreadsheet.sheet1
             header = df.columns.tolist()
             values = [header] + df.fillna("").values.tolist()
             main_sheet.clear()
             main_sheet.update('A1', values)
+            _invalidate_data_cache()
             return True
         except Exception as e:
             st.error(f"שגיאה בשמירה: {e}")
